@@ -21,6 +21,8 @@ def main() -> int:
     summary = load("negative-suite-summary.json")
 
     errors = []
+    if spec.get("environment", {}).get("toolkit_main") != results.get("toolkit_main"):
+        errors.append("negative-suite result toolkit_main does not match the fixed spec")
     case_ids = {c["id"] for c in spec["cases"]}
     judged = [r["id"] for r in results["results"]]
     if case_ids != set(judged):
