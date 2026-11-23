@@ -1,13 +1,17 @@
-# Edit every placeholder before publishing. This file describes the PAPER, not the toolkit.
+# OpenPreprint Kit — 改変検出・時刻証拠・障害復旧の実証評価（v1）メタデータ（所有者承認済み: 2026-11-23）
 schema_version: 1
-title: "Untitled Preprint"
+title: 'OpenPreprint Kitにおける改変検出・時刻証拠・障害復旧の実証評価'
 authors:
-  # Use given_names + family_names for people; name for a research group/entity.
-  - given_names: "Replace with a given name"
-    family_names: "Replace with a family name"
-    orcid: null
-abstract: "Replace with an abstract."
-keywords: []
-version: "v0" # v0 is a draft. Use v1, v2, v1.1, etc. for public releases.
-paper: "paper/paper.pdf"
-license: "UNSPECIFIED" # e.g. CC-BY-4.0 (different from toolkit's MIT license)
+- name: Unjuno
+  orcid: null
+abstract: プレプリント公開物に対する意図的な改変、信頼設定の誤り、証拠失効、公開処理の途中失敗をどの範囲で検出・拒否・復旧できるかを、固定20否定ケース（23判定、誤受理0）・2環境での正常検証・ローカル合成PKI・実障害記録（INC-1/INC-2）に基づく実測で評価する。
+keywords:
+- tamper detection
+- RFC 3161
+- trust boundary
+- PKI
+- restore
+- incident analysis
+version: v1
+paper: paper/paper.pdf
+license: CC-BY-4.0
