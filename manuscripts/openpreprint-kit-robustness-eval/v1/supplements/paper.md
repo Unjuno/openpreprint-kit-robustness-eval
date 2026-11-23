@@ -16,7 +16,7 @@ header-includes:
 
 ## 要旨
 
-本稿は、プレプリント公開物に対する意図的な改変、信頼設定の誤り、証拠の失効、公開処理の途中失敗を、OpenPreprint Kitがどの範囲で検出・拒否・復旧できるかを、実際に実行した試験に基づいて評価する。対象は固定したツールキット `main`（`c51aa55edfeb41e43b2c86982765c5d0777771ed`）である。実験は20の否定ケース（23判定）・復元試験・2件の実障害の記録・ローカル合成PKIによる失効/期限切れ/古いCRLの実測を含み、誤受理は0件だった。一方で、これらの試験は特定の実装・環境・信頼根の下での観測であり、未試験の入力や実装共通欠陥に対する一般化はできない。
+本稿は、プレプリント公開物に対する意図的な改変、信頼設定の誤り、証拠の失効、公開処理の途中失敗を、実際に実行した試験に基づいて評価する。試験ごとの対象SHAを区別する。事前固定した否定試験specの20ケース（23判定）は `2cd536caa4c3fbc31b1fe32274e35b23ff654259` で実行し、誤受理は0件だった。後続のRFC 3161、保存物復元、CIおよび公開手順の再検証は、別の後続main `c51aa55edfeb41e43b2c86982765c5d0777771ed` を対象とした。対象SHA、環境、信頼根を限定した観測であり、未試験入力や実装共通欠陥への一般化はできない。
 
 **キーワード:** 改変検出、RFC 3161、信頼境界、PKI、復元、障害分析
 
@@ -80,6 +80,8 @@ Gitのコミット日時は環境で指定できるため存在時刻の証明�
 
 spec は事前固定（`negative-suite-spec.json`, 2026-11-14）。誤受理は0件（23判定すべてを機械照合済み、`negative-suite-results.json`）。
 
+否定試験specと結果は、specに記録された `2cd536caa4c3fbc31b1fe32274e35b23ff654259` を対象に実行した。その他の後続公開・タイムスタンプ・CI検証の対象は §7 に記載する `c51aa55edfeb41e43b2c86982765c5d0777771ed` である。両者を同一の試験対象として解釈してはならない。
+
 ### 5.2 オフライン復元
 
 公開5版（実論文1＋合成デモ4）すべてで、匿名HTTPSダウンロードと一致するバイト列を保存ZIPから新規環境相当へ復元できた（paper v1: `restore_byte_equality=true`、デモ各版同様）。
@@ -103,7 +105,8 @@ INC-1（WindowsのPATH欠陥による公開停止 `SOURCE_COMMITTED`）と INC-2
 
 ## 7. 再現性とデータ公開
 
-- 対象 main: `c51aa55edfeb41e43b2c86982765c5d0777771ed`（CI: Validate/Quality/CodeQL/self-application すべて success）
+- 否定試験の対象: `2cd536caa4c3fbc31b1fe32274e35b23ff654259`（spec/resultsに記録）
+- 後続の公開・CI・復元・タイムスタンプ再検証対象 main: `c51aa55edfeb41e43b2c86982765c5d0777771ed`（CI: Validate/Quality/CodeQL/self-application すべて success）
 - 否定試験: `manuscripts/openpreprint-kit-robustness-eval/data/`（spec・results・PKI記録・incident-analysis.json）
 - 実験プログラム: `manuscripts/openpreprint-kit-robustness-eval/analysis/`（再実行手順は `README.md`）
 - 環境: Windows + OpenSSL 3.5.6 + CPython 3.12.10（および Ubuntu 24.04 CI, run #43583374274）
