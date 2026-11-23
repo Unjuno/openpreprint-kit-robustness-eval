@@ -67,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           export SOURCE_DATE_EPOCH=1794528000
-          python scripts/reproducible_pdf_id.py --source-commit "$GITHUB_SHA" --output "$RUNNER_TEMP/reproducible-pdf-id.tex"
+          python scripts/reproducible_pdf_id.py --source-commit c51aa55edfeb41e43b2c86982765c5d0777771ed --output "$RUNNER_TEMP/reproducible-pdf-id.tex"
           pandoc manuscripts/openpreprint-kit-robustness-eval/v1/paper.md --from markdown --pdf-engine=xelatex --include-before-body "$RUNNER_TEMP/reproducible-pdf-id.tex" --output "$RUNNER_TEMP/robustness-v1.pdf"
           pandoc manuscripts/openpreprint-kit-robustness-eval/v2/paper.md --from markdown --pdf-engine=xelatex --include-before-body "$RUNNER_TEMP/reproducible-pdf-id.tex" --output "$RUNNER_TEMP/robustness-v2.pdf"
           python - "$RUNNER_TEMP/robustness-v1.pdf" "$RUNNER_TEMP/robustness-v2.pdf" <<'PY'
