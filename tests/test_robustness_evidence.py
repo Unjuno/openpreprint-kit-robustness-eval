@@ -8,6 +8,8 @@ import sys
 import tempfile
 import unittest
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[1]
 ANALYZERS = (
@@ -19,6 +21,22 @@ DATA = ROOT / "manuscripts/openpreprint-kit-robustness-eval/v1/data"
 
 
 class RobustnessEvidenceTests(unittest.TestCase):
+    def test_v2_release_manifest_declares_every_staged_public_research_file(self):
+        v2 = ROOT / "manuscripts/openpreprint-kit-robustness-eval/v2"
+        config = yaml.safe_load((v2 / "research-assets.yaml").read_text(encoding="utf-8"))
+        declared = {asset["path"] for asset in config["public_assets"]}
+        expected = set()
+        for area in ("data", "analysis"):
+            for source in (ROOT / area, v2 / area):
+                if source.exists():
+                    expected.update(f"{area}/{path.name}" for path in source.iterdir() if path.is_file())
+        expected.update(
+            f"supplements/{path.name}"
+            for path in (v2 / "supplements").iterdir()
+            if path.is_file()
+        )
+        self.assertEqual(expected, declared)
+
     def test_results_must_match_the_pre_fixed_spec_commit(self):
         for source_analyzer in ANALYZERS:
             with self.subTest(analyzer=source_analyzer.relative_to(ROOT).as_posix()):

@@ -26,6 +26,26 @@ public_assets:
   description: Two real incidents encountered during the first publication (INC-1, INC-2)
   license: CC-BY-4.0
   public_confirmed: true
+- path: data/negative-suite-summary.json
+  role: dataset
+  description: Per-case verdict summary for the shared negative suite
+  license: CC-BY-4.0
+  public_confirmed: true
+- path: data/release-matrix.json
+  role: dataset
+  description: Measured IDs, commits, and attestation verification for the published releases
+  license: CC-BY-4.0
+  public_confirmed: true
+- path: data/tsa-reverification.json
+  role: dataset
+  description: Re-verification results of RFC 3161 proofs for the five published releases
+  license: CC-BY-4.0
+  public_confirmed: true
+- path: analysis/analyze_robustness.py
+  role: analysis_code
+  description: Standard-library-only recomputation of negative-suite facts (shared with v1)
+  license: MIT
+  public_confirmed: true
 - path: analysis/reverify_v2.py
   role: analysis_code
   description: Standard-library-only recomputation of v2 experiment records
