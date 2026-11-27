@@ -61,11 +61,18 @@ class FirstPaperSelfApplicationTests(unittest.TestCase):
         self.assertEqual(meta['license'], 'CC-BY-4.0')
         self.assertEqual(meta['version'], 'v1')
 
-    def test_kit_root_is_still_an_unapproved_template(self):
+    def test_root_metadata_matches_template_or_generated_paper_repository(self):
         import yaml
         meta=yaml.safe_load((ROOT/'preprint.yaml').read_text('utf-8'))
-        self.assertEqual(meta['version'],'v0')
-        self.assertEqual(meta['license'],'UNSPECIFIED')
+        repository=os.environ.get('GITHUB_REPOSITORY','Unjuno/openpreprint-kit').lower()
+        if repository == 'unjuno/openpreprint-kit':
+            self.assertEqual(meta['version'],'v0')
+            self.assertEqual(meta['license'],'UNSPECIFIED')
+        else:
+            self.assertIn(meta['version'],{'v1','v2'})
+            self.assertNotEqual(meta['license'],'UNSPECIFIED')
+            self.assertNotIn('Untitled',meta['title'])
+            self.assertTrue((ROOT/meta['paper']).is_file())
 
     def test_rights_notice_is_consistent_with_metadata(self):
         import yaml

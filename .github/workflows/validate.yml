@@ -34,6 +34,8 @@ jobs:
         run: python scripts/validate.py
       - name: Validate declared research assets and private commitments
         run: python scripts/research_package.py --check
+      - name: Reconcile fixed negative-suite evidence
+        run: python manuscripts/openpreprint-kit-robustness-eval/v1/analysis/analyze_robustness.py
       - name: Validate review records and preserve existing history
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}

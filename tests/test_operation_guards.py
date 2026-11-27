@@ -19,11 +19,13 @@ class OperationGuardTests(unittest.TestCase):
         for path in (ROOT/'.github/workflows').glob('*.yml'):
             doc=yaml.load(path.read_text(encoding='utf-8'),Loader=yaml.BaseLoader)
             for job_name, job in doc['jobs'].items():
-                # Only the read-only TeX self-application can exceed 15 minutes:
-                # cold Ubuntu apt mirrors exceeded 15 minutes before PDF testing.
-                limit = 30 if (path.name, job_name) == (
-                    'first-paper-selftest.yml', 'self-application'
-                ) else 15
+                # Read-only TeX jobs can exceed 15 minutes because cold Ubuntu
+                # apt mirrors may take longer to install the CJK toolchain.
+                extended_tex_jobs = {
+                    ('first-paper-selftest.yml', 'self-application'),
+                    ('quality.yml', 'robustness-paper-pdf'),
+                }
+                limit = 30 if (path.name, job_name) in extended_tex_jobs else 15
                 self.assertLessEqual(
                     int(job['timeout-minutes']), limit,
                     f'{path.name}/{job_name}: timeout exceeds {limit} min'

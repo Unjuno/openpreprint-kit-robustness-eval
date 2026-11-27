@@ -86,6 +86,8 @@ python manuscripts/openpreprint-kit-robustness-eval/v1/analysis/analyze_robustne
 
 実験記録: `v2/data/{e-v2-1-crl-lifecycle.json, renewal-experiment.json, negative-suite-results.json}`。対象実装: `c51aa55edfeb41e43b2c86982765c5d0777771ed`。
 
+ここに併記した否定試験データはv1から継承した記録であり、その事前固定specと23判定は `2cd536caa4c3fbc31b1fe32274e35b23ff654259` で実行された。E-V2-1/E-V2-2の追加実験と後続検証の対象SHA `c51aa55edfeb41e43b2c86982765c5d0777771ed` とは区別する。
+
 環境: Windows（CPython 3.12.10、OpenSSL 3.5.6）。データ: `v2/data/{e-v2-1-crl-lifecycle.json, renewal-experiment.json}`。対象実装: `c51aa55e…`。
 
 ## 6. 結論

@@ -44,6 +44,56 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  robustness-paper-pdf:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Install locked validators and Japanese typesetting tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --require-hashes -r requirements-build.lock
+          python -m pip install --require-hashes --no-build-isolation -r requirements.lock
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends pandoc texlive-xetex lmodern texlive-lang-cjk texlive-lang-chinese texlive-fonts-recommended fonts-noto-cjk fonts-liberation fonts-dejavu-core
+      - name: Build and validate both manuscript PDFs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SOURCE_DATE_EPOCH=1794528000
+          python scripts/reproducible_pdf_id.py --source-commit c51aa55edfeb41e43b2c86982765c5d0777771ed --output "$RUNNER_TEMP/reproducible-pdf-id.tex"
+          pandoc manuscripts/openpreprint-kit-robustness-eval/v1/paper.md --from markdown --pdf-engine=xelatex --include-before-body "$RUNNER_TEMP/reproducible-pdf-id.tex" --output "$RUNNER_TEMP/robustness-v1.pdf"
+          pandoc manuscripts/openpreprint-kit-robustness-eval/v2/paper.md --from markdown --pdf-engine=xelatex --include-before-body "$RUNNER_TEMP/reproducible-pdf-id.tex" --output "$RUNNER_TEMP/robustness-v2.pdf"
+          python - "$RUNNER_TEMP/robustness-v1.pdf" "$RUNNER_TEMP/robustness-v2.pdf" <<'PY'
+          from pathlib import Path
+          import sys
+          from scripts.pdf_validation import inspect_pdf
+          for name in sys.argv[1:]:
+              path = Path(name)
+              size, pages = inspect_pdf(path)
+              print(f"{path.name}: bytes={size} pages={pages}")
+          PY
+          cmp "$RUNNER_TEMP/robustness-v1.pdf" paper/paper.pdf
+          cmp "$RUNNER_TEMP/robustness-v1.pdf" manuscripts/openpreprint-kit-robustness-eval/v1/paper.pdf
+          cmp "$RUNNER_TEMP/robustness-v2.pdf" manuscripts/openpreprint-kit-robustness-eval/v2/paper.pdf
+          (cd "$RUNNER_TEMP" && sha256sum robustness-v1.pdf robustness-v2.pdf > SHA256SUMS)
+      - name: Retain rendered candidates for release assembly
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: robustness-paper-pdfs-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/robustness-v1.pdf
+            ${{ runner.temp }}/robustness-v2.pdf
+            ${{ runner.temp }}/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+
   windows-regression:
     name: windows-regression (3.12)
     runs-on: windows-2025
