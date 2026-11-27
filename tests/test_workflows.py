@@ -12,6 +12,13 @@ class WorkflowTests(unittest.TestCase):
         # BaseLoader preserves YAML 1.2-like 'on', unlike SafeLoader YAML 1.1 booleans.
         return yaml.load((ROOT / ".github/workflows/publish.yml").read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
 
+    def test_posix_shell_launchers_are_checked_out_with_lf(self):
+        launchers = tuple((ROOT / "scripts").glob("*.sh"))
+        self.assertTrue(launchers)
+        for launcher in launchers:
+            with self.subTest(launcher=launcher.name):
+                self.assertNotIn(b"\r", launcher.read_bytes())
+
     def test_research_inputs_checked_and_archive_uploaded(self):
         publisher = (ROOT / '.github/workflows/publish.yml').read_text(encoding='utf-8')
         validator = (ROOT / '.github/workflows/validate.yml').read_text(encoding='utf-8')
