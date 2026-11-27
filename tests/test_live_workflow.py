@@ -1,5 +1,7 @@
 """Network acceptance needs explicit human dispatch and a separate clean verifier runner."""
 from pathlib import Path
+import hashlib
+import json
 import unittest
 import yaml
 
@@ -39,4 +41,11 @@ class LiveWorkflowTests(unittest.TestCase):
                     self.assertNotIn('${{',step['run'])
         self.assertNotIn('secrets.',self.raw)
         self.assertNotIn('contents: write',self.raw)
+
+    def test_rfc3161_pem_bytes_remain_sha256_pinned_on_windows_checkouts(self):
+        attributes=(ROOT/'.gitattributes').read_text(encoding='utf-8')
+        self.assertRegex(attributes,r'(?m)^trust/\*\.pem -text$')
+        policy=json.loads((ROOT/'timestamp-policy.json').read_text(encoding='utf-8'))
+        ca=(ROOT/policy['ca_file']).read_bytes()
+        self.assertEqual(hashlib.sha256(ca).hexdigest(),policy['ca_sha256'])
 
