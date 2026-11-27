@@ -1,0 +1,2 @@
+# RFC 3161 trust material is SHA-256 pinned; preserve the committed PEM bytes.
+trust/*.pem -text
