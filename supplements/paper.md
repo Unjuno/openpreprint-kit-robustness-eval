@@ -1,7 +1,7 @@
 ---
-title: 'OpenPreprint Kitにおける改変検出・時刻証拠・障害復旧の実証評価'
+title: 'OpenPreprint Kitにおける改変検出・時刻証拠・障害復旧の実証評価 — 追加実験（v2）'
 author: 'Unjuno'
-date: '2026年11月15日 / v1候補 / 未査読'
+date: '2026年11月15日 / v2候補 / 未査読'
 lang: ja-JP
 fontsize: 10pt
 papersize: a4
@@ -16,124 +16,104 @@ header-includes:
 
 ## 要旨
 
-本稿は、プレプリント公開物に対する意図的な改変、信頼設定の誤り、証拠の失効、公開処理の途中失敗を、OpenPreprint Kitがどの範囲で検出・拒否・復旧できるかを、実際に実行した試験に基づいて評価する。対象は固定したツールキット `main`（`c51aa55edfeb41e43b2c86982765c5d0777771ed`）である。実験は20の否定ケース（23判定）・復元試験・2件の実障害の記録・ローカル合成PKIによる失効/期限切れ/古いCRLの実測を含み、誤受理は0件だった。一方で、これらの試験は特定の実装・環境・信頼根の下での観測であり、未試験の入力や実装共通欠陥に対する一般化はできない。
+本稿は、v1 で報告した20否定ケース・復元・信頼境界の評価に続き、v1 の結果から未解決だった2つの技術的問いを追加実験で解く。第一に、同一PKI・同一TSA証明書・同一問合せ/応答の下で CRL の鮮度だけが検証成否を分けるかを、fresh/stale の CRL で対照実験した。fresh CRL（nextUpdate=2026-12-13）では検証PASS、stale CRL（nextUpdate=2020-01-01）では OpenSSL が `Verify error: CRL has expired` で拒否することを実測した。第二に、保存済み公開物に対する前方RFC 3161更新（`renewal.py`）を、合成デモの preservation ZIP（SHA-256 `106d5363…ffa26c`）に適用し、チェーンの検証成功と TSA 署名時刻を記録した。v1 からの実質的差分は E-V2-1（CRL ライフサイクル対照）と E-V2-2（前方更新の実測）である。
 
-**キーワード:** 改変検出、RFC 3161、信頼境界、PKI、復元、障害分析
+**キーワード:** CRL鮮度、失効確認、RFC 3161更新、限界、実証
 
-## 1. 背景と目的
+## 1. 背景と問い
 
-［論文A v2 / v1 の実運用報告［1］と重複する記述は、設計と初期CI評価までに限る。］本稿は、公開物を「意図的に壊す・すり替える・信頼根を誤る・失効させる」という攻撃者の視点で、既存の検証プログラム（`verify_release`, `verify_evidence`, `preserve`, `timestamp`, `observation`）がどこまで拒否できるかを測る。論文A（同キットの設計と実運用評価）は成果と限界を述べるものであり、本稿は検証機構自体の頑健性に絞る。
+v1 の結果、古いCRLは拒否されることを確認した（ケース15）が、「fresh CRL で正しく受理されるか」と「同じPKI・同じ問合せに対し鮮度だけが成否を分けるか」は未記録だった。また、前方更新（forward renewal）が実際の保存ZIPに対して有効にチェーンを延長できるかは、v1 では評価対象外だった。本稿はこれら2問を、実測に基づいて解く。v1 の記述および結論のうち、本稿で追加実験対象とした箇所以外は変更しない。
 
-## 2. 関連研究
+## 2. 実験計画（固定）
 
-Gitのコミット日時は環境で指定できるため存在時刻の証明にならない［2］。RFC 3161はメッセージのダイジェストに対する認証局の時刻付与を規定し、署名・証明書連鎖・失効情報の検証を要求する［3］。GitHubのImmutable Releasesは公開後のタグと資産を固定するが、説明文等は編集可能である［4］。オンライン公開と保存の分離、すなわち「公開はGitHub、復元はオフライン」という方針は、本キット以外にも複製・バックアップ設計の一般論として広く知られている。これらを統合して検証可能なプレプリント流通を提供する具体実装として本稿は評価を行う。
+- **対象実装**: `c51aa55edfeb41e43b2c86982765c5d0777771ed`（main、CI: Validate/Quality/CodeQL success）
+- **環境**: Windows（CPython 3.12.10, OpenSSL 3.5.6）、ローカル合成PKI（自作CA、RSA-2048）と FreeTSA（E-V2-2の実通信、バイト一致のみで内容の真正性は主張しない）
+- **仮説 H1**: 同一PKI・同一TSA証明書・同一問合せ/応答の下、CRLの鮮度（nextUpdate）のみが検証成否を分ける。
+- **仮説 H2**: 保存済みの検証済み preservation ZIP は、前方RFC 3161更新で「古い証拠を結ぶ新しい時刻証拠」のチェーンを新規取得できる。
+- **期待**: H1: fresh→PASS / stale→REJECT。H2: issue & verify が PASS。
+- **中断条件**: 実TSAへの通信が失敗した場合や、ローカルPKIの構築に失敗した場合は、その時点で記録を確定し対象を再検討する。
+- **モック/ローカルPKI/実通信の区別**: E-V2-1はローカル合成PKI（実暗号処理）、E-V2-2は実TSA（FreeTSAへの問合せのみ。リポジトリへの書込なし）。
 
-## 3. 脅威モデル
+## 3. 結果
 
-| 資産 | 攻撃者が狙うもの | 想定する失敗 |
+### 3.1 E-V2-1 CRL鮮度対照（同一PKI・同一TSA証明書・同一問合せ）
+
+| 条件 | CRL last/next | 検証結果 |
 |:--|:--|:--|
-| 公開PDF | 改変・すり替え | 別バイト列を正規版として通す |
-| 研究データ/コード | 改変・追加 | ハッシュ整合を装う |
-| タイムスタンプ | 署名偽造・nonce攪拌 | 時刻証拠を無効化する |
-| 信頼根 | CA指紋/OID/CRLの誤り | 攻撃者のTSA応答を受け入れる |
-| 復元物 | ZIP引数/symlink | ディスク・展開を破壊/すり抜け |
-| 公開処理 | 途中失敗 | ゴミのような公開状態を黙認 |
+| fresh | 2026-11-13 → 2026-12-13 | **VERIFIED**（TSA署名時刻 2026-11-14T16:18:23Z） |
+| stale | 2019-12-01 → 2020-01-01 | **REJECTED**（`OpenSSL ... ts_verify_cert: Verify error: CRL has expired`） |
 
-信頼境界は、**検証者が自ら選定した信頼ポリシー**（FreeTSA、CA指紋=`2151b611…`、policy OID `1.2.3.4.1`）と、**外部に固定した期待ダイジェスト**である。同一運用者が公開者と検証者を兼ねるとき、独立性は保証されない（本評価はその限界を含む）。
+fresh 側は leaf の有効性確認を含め正常に通過し、stale 側は CRL の鮮度のみを理由に拒否された。これにより、v1 ケース15の拒否は「証明書チェーンまたは問合せの不備」によるものではなく、CRL鮮度に帰因することが対照によって示された。なお、失効確認は OpenSSL の `ts_verify_cert` 内で行われ、アプリケーション層の検証コードの挙動ではない。
 
-## 4. 検証仮説と試験計画（H/T/D/C/U）
+### 3.2 E-V2-2 前方RFC 3161更新（保存ZIP）
 
-- **H**: 検証プログラムは、固定20ケースの改変/信頼誤設定/途中失敗を、それぞれ期待どおりに拒否する；オフライン復元は完全一致する。
-- **T**: 次の対象を試験する。(1) PDF/データ/コード/manifest/SHA256SUMSの改変（a:素の改変、b:整合を外部レファレンスなしで整えた版）、(2) 欠落/余計なファイル、(3) 別repo/別版、(4) 誤CA指紋・誤Policy OID・nonce攪拌・署名改変、(5) 失効/期限切れ/古いCRL（合成PKI）、(6) 危険ZIP、(7) 誤観測鍵/再署名、(8) INC-1/INC-2。
-- **D**: 期待＝各ケース拒否・復元一致・誤受理0。1つでも誤受理があればFAIL。
-- **C**: 同一コードによる共通欠陥（すべての試験が同じ実装で書かれている）、信頼根の一括差し替え、検証対象と証拠の同時差し替え。
-- **U**: TSA時刻の精度（未記載）、cron時刻の系統制約、CRLの鮮度、検証と公開の同一オペレータ性。
+対象: `Unjuno/opk-demo-acceptance-a` の v1 の preservation ZIP（SHA-256 `106d536371c9286952eca1cf96fff542cc5de949c0673956818f52f13cffa26c`）、`renewal.py issue`（`--apply`、FreeTSA）。
 
-**計測の区別**: 本稿の実験は (i) ローカル実暗号処理（Windows, OpenSSL 3.5.6, CPython 3.12.10）、(ii) ローカル合成PKI、(iii) 実TSA（FreeTSA）、の3種を区別して記録する。モック通信は使用していないが、合成公開物は実研究の成果ではない（デモ資産のみ）。
+| 項目 | 値 |
+|:--|:--|
+| issue | **PASS** |
+| chain SHA-256 | `1eaae7e2ad3239a516b4731d14515be6bd5748caa45a038a59aebcdea2a6f993` |
+| verify | **PASS**（tsa_policies=[1.2.3.4.1]、tsa_signed_times=2026-11-14T16:14:04Z） |
+| historical_ltv | NOT_ESTABLISHED |
 
-## 5. 結果
+この操作は「新しい時刻証拠を既存証拠に結合して保存可能にする」ものであり、TSA/CAの失効後の歴史的LTV、著者の本人確認、初公開時刻、保存先の耐久性は証明しない。
 
-### 5.1 否定ケース（固定20件、23判定）
+## 4. 失敗・反証・限界
 
-| # | ケース | 層 | 結果 |
-|--:|:--|:--|:--|
-| 1 | PDF改変 | バンドル整合 | 拒否（SHA不一致・SHA256SUMS/metadata不整合） |
-| 2 | データ改変 (a/b) | バンドル整合/TSA結合 | 拒否/拒否 |
-| 3 | コード改変 (a/b) | バンドル整合/TSA結合 | 拒否/拒否 |
-| 4 | manifest改変 (a/b) | バンドル整合/TSA結合 | 拒否/拒否 |
-| 5 | 資産欠落 | バンドル整合 | 拒否 |
-| 6 | 余計なファイル | バンドル整合 | 拒否 |
-| 7 | 別リポジトリ | ソース特定 | 拒否 |
-| 8 | 別版（v1→v2扱い） | ソース特定 | 拒否 |
-| 9 | 誤CA指紋 | 信頼CAピン | 拒否 |
-| 10 | 誤policy OID | TSA OID | 拒否 |
-| 11 | nonce不一致（他版のtsq流用） | RFC 3161 nonce結合 | 拒否 |
-| 12 | 署名バイト反転 | TSA署名 | 拒否 |
-| 13 | 失効TSA（ローカルPKIで revoke 後） | 失効確認 | 拒否 |
-| 14 | 期限切れTSA（ローカルPKIで期限切れcert） | 有効期限 | 拒否 |
-| 15 | 古いCRL（nextUpdate 2019-11 → 2020-01 の CRL） | CRL鮮度 | 拒否（`CRL has expired`） |
-| 16 | ZIPパストラバーサル | アーカイブ | 拒否 |
-| 17 | 重複member | アーカイブ | 拒否 |
-| 18 | symlink member | アーカイブ | 拒否 |
-| 19 | 誤観測鍵（Ed25519） | 観測署名 | 拒否 |
-| 20 | 観測後の再署名改変 | 観測主張の再署名 | 拒否 |
+- E-V2-1はローカル合成PKIの結果であり、実TSA/CAの運用挙動の一般化ではない。
+- `Verify error: CRL has expired` は OpenSSL の実装挙動であり、本キット固有の安全性保証ではない。
+- E-V2-2の FreeTSA へのリクエストは最小限の存在時刻証明であり、データの内容を保証しない。
+- 同一運用者・同一端末であり、独立検証・独立監査は未実施。
+- 本稿は v1 の記述を部分的に更新するが、v1 における「20ケースすべて拒否」「復元一致」「誤受理0」の結論自体は変更していない。
 
-spec は事前固定（`negative-suite-spec.json`, 2026-11-14）。誤受理は0件（23判定すべてを機械照合済み、`negative-suite-results.json`）。
+## 5. 再現性
 
-### 5.2 オフライン復元
+```bash
+# E-V2-1（同一PKI・同一TSA証明書・同一問合せでの CRL 鮮度対照）
+python manuscripts/openpreprint-kit-robustness-eval/v2/analysis/reverify_v2.py
 
-公開5版（実論文1＋合成デモ4）すべてで、匿名HTTPSダウンロードと一致するバイト列を保存ZIPから新規環境相当へ復元できた（paper v1: `restore_byte_equality=true`、デモ各版同様）。
+# E-V2-2（保存ZIPに対する前方RFC 3161更新）
+python scripts/renewal.py issue <v1-preservation.zip> \
+  --expected-archive-sha256 106d536371c9286952eca1cf96fff542cc5de949c0673956818f52f13cffa26c \
+  --source-policy <trusted-policy.json> \
+  --repository Unjuno/opk-demo-acceptance-a --version v1 \
+  --renewal-policy <trusted-policy.json> \
+  --out renewal-chain.json --apply
 
-### 5.3 途中失敗と保存
+# 否定試験結果の再集計（v1）
+python manuscripts/openpreprint-kit-robustness-eval/v1/analysis/analyze_robustness.py
+```
 
-INC-1（WindowsのPATH欠陥による公開停止 `SOURCE_COMMITTED`）と INC-2（immutable読戻し競合）を観察した。INC-2は自動回復できず、手動のbounded retry追加が必要だった (PR #34/#35)。いずれの場合も、既存repo・既存Releaseの削除/上書きは行わず、失敗記録（`publication-report.json` 等）はPASSに書き換えられなかった。**"PASSしないことを正しく記録する"という復旧能力そのものが、復号検証の一部である。**
+実験記録: `v2/data/{e-v2-1-crl-lifecycle.json, renewal-experiment.json, negative-suite-results.json}`。対象実装: `c51aa55edfeb41e43b2c86982765c5d0777771ed`。
 
-### 5.4 正常系との対比
+ここに併記した否定試験データはv1から継承した記録であり、その事前固定specと23判定は `2cd536caa4c3fbc31b1fe32274e35b23ff654259` で実行された。E-V2-1/E-V2-2の追加実験と後続検証の対象SHA `c51aa55edfeb41e43b2c86982765c5d0777771ed` とは区別する。
 
-失敗が正しく検出・停止・記録される一方、正常系（5 Release＋再検証5回、復元5回、TSA 5回、復帰試験、合成デモのv1不変性確認）はすべてPASSした。ただし正常PASは「その設定・その環境での成功」に限る。
+環境: Windows（CPython 3.12.10、OpenSSL 3.5.6）。データ: `v2/data/{e-v2-1-crl-lifecycle.json, renewal-experiment.json}`。対象実装: `c51aa55e…`。
 
-## 6. 失敗・反証・限界
+## 6. 結論
 
-- 未試験の入力に対する誤受理確率は0とは主張できない（事前固定20ケースに外挿できない）。
-- 暗号方式（SHA-256/RFC 3161/Ed25519）の安全性そのものを証明しない。
-- 同一コードベース・同一オペレータによる自己検証であり、独立再実装・交差実装の相互確認ではない。
-- 古いCRLの拒否は「CRLが失効として報告される」ことの確認であり、CA compromise 後の歴史的LTVや強制再取得は保証しない。
-- 本評価はWindowsと GitHub Actions Ubuntu の2環境だが、2環境も同一GitHubアカウント配下であり独立性は主張できない。
-- INC-1の修正は `cffconvert` 検出部のみであり、同種の「子プロセスPATH」欠陥が他に存在する保証はない。
+CRL鮮度のみを変更した対照実験（E-V2-1）により、「古いCRLは拒否される」という v1 の観測が、チェーン・問合せ・証明書の誤りではなく鮮度に基づくことが確認された。また、保存ZIPに対する前方RFC 3161更新（E-V2-2）が実際に機能し、issue/verifyの双方がPASSした。これらの結果は、保存と失効を同時に扱う実運用での要因特定に資するが、独立監査・独立観測・LTV・著者確認を代替するものではない。
 
-## 7. 再現性とデータ公開
-
-- 対象 main: `c51aa55edfeb41e43b2c86982765c5d0777771ed`（CI: Validate/Quality/CodeQL/self-application すべて success）
-- 否定試験: `manuscripts/openpreprint-kit-robustness-eval/data/`（spec・results・PKI記録・incident-analysis.json）
-- 実験プログラム: `manuscripts/openpreprint-kit-robustness-eval/analysis/`（再実行手順は `README.md`）
-- 環境: Windows + OpenSSL 3.5.6 + CPython 3.12.10（および Ubuntu 24.04 CI, run #43583374274）
-- 各数値は原ログ/保存ZIP復元記録/GitHub APIレスポンスに基づく。推測で補った値はない。確認不能な項目は §9 で UNKNOWN と明記する。
-
-## 8. 結論
-
-事前固定された20ケースの改変・信頼誤設定・失効・危険なZIP・署名改変はすべて拒否され、保存ZIPからの復元は一貫して完全一致した。OpenPreprint Kitの検証経路は、少なくとも試験した範囲では「壊れた入力を拒否する」能力を持つ。反対に、失敗を正しく記録し公開を停止するという非暗号的な振る舞いも同様に検証済みであるのは、本評価の重要な帰結の1つである。実装欠陥の排除・独立検証者・独立監査は依然として未達であり、これらが揃うまでは本キットの公開物は「検証済み」であっても「完成」ではない。
-
-## 9. UNKNOWN・未確証事項
+## 7. UNKNOWN
 
 | 項目 | 状態 |
 |:--|:--|
-| TSA（FreeTSA）の時刻精度 | UNKNOWN（証明書のaccuracy欄が記録されず、本稿では数値化できない） |
-| CRLの更新頻度・維持責任 | UNKNOWN（採用した時点は有効だが、継続と責任者は未確定） |
-| 検証相互独立性 | UNKNOWN（同一オペレータ） |
-| 実GitHubのすべての障害モードでの生存性 | UNKNOWN（INC-2で1例確認のみ） |
+| 他TSA（実運用の別CA）での失効/CA更新挙動 | UNKNOWN |
+| CRL配布の継続性・責任者 | UNKNOWN |
+| 実GitHub障害時の復旧 | UNKNOWN |
 
 ## 著者・AI支援・公開状態
 
-本稿はAI支援で作成された未査読のv1候補である。著者表示は「Unjuno」（所有者による申告、本人確認・独立証明ではない）、本文ライセンスはCC BY 4.0、コード・データは資産別ライセンスに従う。未査読・未監査であり、独立した人間による最終承認前に公開してはならない。
+AI支援で作成された未査読のv2候補。著者表示「Unjuno」（所有者申告、本人確認・独立証明ではない）、本文CC BY 4.0、コード・データは資産別ライセンスに従う。公開・版上げ・G2判定には、著者の最終承認と独立した検証担当の署名が必要である。
 
 ## 参考資料
 
-[1] Unjuno. *OpenPreprint Kit — 実運用評価（v2）*. （本キット同梱、2026年11月）.
+[1] Unjuno. *OpenPreprint Kitにおける改変検出・時刻証拠・障害復旧の実証評価（v1）*. （本キット同梱、2026年11月）.
 
-[2] Git Project. *git-commit(1) man page*. https://git-scm.com/docs/git-commit （2026-11-14確認）.
+[2] OpenPreprint Kit. E-V2-1/E-V2-2 の実験記録（本キット `manuscripts/openpreprint-kit-robustness-eval/v2/data/`）.
 
 [3] Adams, C., Cain, P., Pinkas, D., Zuccherato, R. *RFC 3161 — Time-Stamp Protocol (TSP)*. IETF RFC 3161 (2001). DOI: 10.17487/RFC3161.
 
-[4] GitHub. *Immutable releases*. https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases （2026-11-14確認）.
+[4] OpenSSL Project. *ts(1) — Time Stamping Authority tool*. https://docs.openssl.org/master/man1/openssl-ts/ （2026-11-14確認）.
 
-[5] OpenPreprint Kit. 本評価の一次証拠: `manuscripts/openpreprint-kit-robustness-eval/data/`（negative-suite-spec.json, negative-suite-results.json, incident-analysis.json）, Issue #5. https://github.com/Unjuno/openpreprint-kit/issues/5 .
+[5] OpenPreprint Kit. `renewal.py`（前方RFC 3161更新）. https://github.com/Unjuno/openpreprint-kit/blob/main/scripts/renewal.py .
