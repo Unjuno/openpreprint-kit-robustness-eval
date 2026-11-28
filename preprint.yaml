@@ -11,6 +11,6 @@ keywords:
 - revocation checking
 - RFC 3161 renewal
 - incident reproducibility
-version: v2.0.1
+version: v2.0.1 # Public releases require stable vMAJOR.MINOR.PATCH.
 paper: paper.pdf
 license: CC-BY-4.0
