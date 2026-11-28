@@ -69,7 +69,9 @@ class FirstPaperSelfApplicationTests(unittest.TestCase):
             self.assertEqual(meta['version'],'v0')
             self.assertEqual(meta['license'],'UNSPECIFIED')
         else:
-            self.assertIn(meta['version'],{'v1','v2'})
+            # A published major version may use either its short tag (v1) or
+            # its first SemVer tag (v1.0.0); both identify the same major.
+            self.assertIn(meta['version'].split('.')[0],{'v1','v2'})
             self.assertNotEqual(meta['license'],'UNSPECIFIED')
             self.assertNotIn('Untitled',meta['title'])
             self.assertTrue((ROOT/meta['paper']).is_file())

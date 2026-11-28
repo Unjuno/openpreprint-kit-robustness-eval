@@ -12,6 +12,6 @@ keywords:
 - PKI
 - restore
 - incident analysis
-version: v1
+version: v1.0.0
 paper: paper/paper.pdf
 license: CC-BY-4.0
